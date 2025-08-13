@@ -127,9 +127,11 @@ const TimeTracker = () => {
                   <div className="p-2 rounded-full bg-blue-500/20">
                     <Clock className="w-5 h-5 text-blue-400" />
                   </div>
-                  <h3 className="font-semibold text-gray-300">Current time</h3>
+                  <h3 className="font-bold text-gray-200 text-lg">
+                    Current time
+                  </h3>
                 </div>
-                <p className="text-xl font-mono text-white">
+                <p className="text-2xl  text-white font-bold">
                   {formatDateTime(currentTime)}
                 </p>
               </div>
@@ -141,11 +143,11 @@ const TimeTracker = () => {
                     <div className="p-2 rounded-full bg-green-500/20">
                       <Calendar className="w-5 h-5 text-green-400" />
                     </div>
-                    <h3 className="font-semibold text-gray-300">
+                    <h3 className="font-bold text-gray-200 text-lg">
                       Time from API
                     </h3>
                   </div>
-                  <p className="text-xl font-mono text-white">
+                  <p className="text-2xl  text-white font-bold">
                     {formatDateTime(timeFromApi)}
                   </p>
                 </div>
@@ -158,11 +160,13 @@ const TimeTracker = () => {
                     <div className="p-2 rounded-full bg-yellow-500/20">
                       <Clock className="w-5 h-5 text-yellow-400" />
                     </div>
-                    <h3 className="font-semibold text-gray-300">
+                    <h3 className="font-bold text-gray-200 text-lg">
                       Time has passed
                     </h3>
                   </div>
-                  <p className="text-xl font-mono text-white mb-4">{elapsed}</p>
+                  <p className="text-2xl  text-white mb-4 font-bold">
+                    {elapsed}
+                  </p>
                   <button
                     onClick={handleCopy}
                     className="absolute bottom-4 right-4 py-3 px-4 flex items-center gap-2 rounded-full bg-gray-600 hover:bg-gray-500 transition-colors group"
