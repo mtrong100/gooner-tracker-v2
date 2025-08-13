@@ -16,9 +16,9 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
 
   const navItems = [
-    { path: "/", label: "Home", icon: <Home size={20} /> },
-    { path: "/manage", label: "Manage Posts", icon: <Settings size={20} /> },
-    { path: "/create-post", label: "Create", icon: <Plus size={20} /> },
+    { path: "/", label: "Trang chủ", icon: <Home size={20} /> },
+    { path: "/manage", label: "Quản lí", icon: <Settings size={20} /> },
+    { path: "/create-post", label: "Tạo mới", icon: <Plus size={20} /> },
   ];
 
   useEffect(() => {

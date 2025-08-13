@@ -172,7 +172,7 @@ const PostGrid = () => {
         transition={{ duration: 0.3 }}
         className="text-3xl font-bold text-white mb-6"
       >
-        Post List
+        Danh sách bài viết
       </motion.h1>
 
       {/* Filter and Sort Controls */}
@@ -193,7 +193,7 @@ const PostGrid = () => {
               name="search"
               value={filters.search}
               onChange={handleFilterChange}
-              placeholder="Search posts..."
+              placeholder="Tìm kiếm..."
               className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
             />
           </div>
@@ -209,8 +209,8 @@ const PostGrid = () => {
               onChange={handleFilterChange}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none transition-all duration-200"
             >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
+              <option value="newest">Mới nhất</option>
+              <option value="oldest">Cũ nhất</option>
             </select>
           </div>
 
@@ -229,7 +229,7 @@ const PostGrid = () => {
             className="flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-all duration-200"
           >
             <RefreshCw className="h-4 w-4" />
-            Reset Filters
+            Đặt lại bộ lọc
           </motion.button>
         </div>
       </motion.div>

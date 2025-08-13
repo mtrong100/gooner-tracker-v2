@@ -78,16 +78,16 @@ const CreatePost = () => {
         <span className="flex items-center bg-gray-800/60 hover:bg-gray-700/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-gray-700/50 group-hover:border-purple-400/30 transition-all">
           <ArrowLeft className="mr-2 h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />
           <span className="text-gray-300 group-hover:text-white bg-gradient-to-r from-purple-400/80 to-blue-400/80 bg-clip-text text-transparent">
-            Back
+            Quay về
           </span>
         </span>
       </button>
 
       <div className="bg-gray-800/70 backdrop-blur-sm rounded-xl shadow-xl overflow-hidden border border-gray-700/50">
         <div className="bg-gradient-to-r from-purple-900/70 to-blue-900/70 p-6">
-          <h1 className="text-2xl font-bold text-white">Create New Post</h1>
+          <h1 className="text-2xl font-bold text-white">Tạo bài viết mới</h1>
           <p className="text-sm text-purple-200 mt-1">
-            Fill in the details below
+            Điền thông tin bên dưới
           </p>
         </div>
 
@@ -99,7 +99,7 @@ const CreatePost = () => {
               className="flex items-center text-sm font-medium text-gray-300"
             >
               <Calendar className="mr-2 h-4 w-4 text-purple-400" />
-              Date & Time
+              Ngày & Giờ
             </label>
             <div className="relative">
               <input
@@ -124,7 +124,7 @@ const CreatePost = () => {
               className="flex items-center text-sm font-medium text-gray-300"
             >
               <TextCursorInput className="mr-2 h-4 w-4 text-purple-400" />
-              Description
+              Mô tả
             </label>
             <textarea
               id="description"
@@ -145,7 +145,7 @@ const CreatePost = () => {
               className="flex items-center text-sm font-medium text-gray-300"
             >
               <Clock className="mr-2 h-4 w-4 text-purple-400" />
-              Duration
+              Thời lượng
             </label>
             <div className="relative">
               <input
@@ -196,10 +196,10 @@ const CreatePost = () => {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Creating...
+                  Đang tạo...
                 </>
               ) : (
-                "Create Post"
+                "Tạo bài viết mới"
               )}
             </button>
           </div>

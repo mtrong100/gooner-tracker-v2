@@ -168,9 +168,11 @@ const ManagePage = () => {
         <div className="bg-gradient-to-r from-purple-900/70 to-blue-900/70 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Manage Posts</h1>
+              <h1 className="text-2xl font-bold text-white">
+                Quản lý bài viết
+              </h1>
               <p className="text-sm text-purple-200 mt-1">
-                View and manage all posts
+                Xem và quản lý tất cả bài đăng
               </p>
             </div>
 
@@ -193,7 +195,7 @@ const ManagePage = () => {
                 <path d="M7 12h10" />
                 <path d="M10 18h4" />
               </svg>
-              <span>Reset filter</span>
+              <span>Đặt lại bộ lọc</span>
             </button>
           </div>
         </div>
@@ -210,7 +212,7 @@ const ManagePage = () => {
                 name="description"
                 value={filters.description}
                 onChange={handleFilterChange}
-                placeholder="Search descriptions..."
+                placeholder="Tìm kiếm..."
                 className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               />
             </div>
