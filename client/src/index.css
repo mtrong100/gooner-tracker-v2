@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+/* Dành cho trình duyệt WebKit (Chrome, Safari, Edge mới) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #2c3e50, #4a6491, #2c3e50);
+  border-radius: 10px;
+  border: 2px solid #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #34495e, #5d7cb3, #34495e);
+}
+
+/* Dành cho Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: linear-gradient(#2c3e50, #4a6491) #1a1a1a;
+}
+
+/* Dành cho IE/Edge cũ */
+body {
+  -ms-overflow-style: none;
+  scrollbar-base-color: #2c3e50;
+  scrollbar-3dlight-color: #2c3e50;
+  scrollbar-highlight-color: #2c3e50;
+  scrollbar-track-color: #1a1a1a;
+  scrollbar-arrow-color: #4a6491;
+  scrollbar-shadow-color: #2c3e50;
+  scrollbar-darkshadow-color: #1a1a1a;
+}
