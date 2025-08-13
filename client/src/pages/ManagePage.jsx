@@ -36,11 +36,26 @@ const ManagePage = () => {
   const fetchPosts = async () => {
     try {
       setLoading(true);
-      const { data } = await getAllPosts({
-        ...filters,
-        sortBy: "dateTime",
-        sortOrder: filters.sortBy === "oldest" ? "asc" : "desc",
-      });
+
+      const apiParams = {
+        description: filters.description,
+        page: filters.page,
+        limit: filters.limit,
+      };
+
+      if (filters.timeOfDay) {
+        // Nếu chọn buổi cụ thể
+        apiParams.timeOfDay = filters.timeOfDay;
+        apiParams.sortBy = "timeOfDay";
+        apiParams.sortOrder = "asc"; // Sáng → Tối (hoặc "desc" nếu muốn ngược)
+      } else {
+        // Nếu chọn tất cả buổi
+        apiParams.sortBy = "dateTime";
+        apiParams.sortOrder = filters.sortBy === "oldest" ? "asc" : "desc";
+      }
+
+      const { data } = await getAllPosts(apiParams);
+
       setPosts(data.data);
       setPagination({
         total: data.total,
@@ -128,17 +143,6 @@ const ManagePage = () => {
     if (hour >= 11 && hour < 13) return "Trưa";
     if (hour >= 13 && hour < 17) return "Chiều";
     return "Tối";
-  };
-
-  const formatDateTime = (dateTime) => {
-    const date = new Date(dateTime);
-    return date.toLocaleString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   return (

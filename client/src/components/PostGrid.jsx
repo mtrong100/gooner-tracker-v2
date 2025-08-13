@@ -234,18 +234,6 @@ const PostGrid = () => {
         </div>
       </motion.div>
 
-      {/* Loading State */}
-      {loading && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex justify-center items-center py-12"
-        >
-          <Loader className="animate-spin h-8 w-8 text-purple-500" />
-        </motion.div>
-      )}
-
       {/* Posts Grid */}
       <AnimatePresence mode="wait">
         {loading ? (
