@@ -170,7 +170,7 @@ const ManagePage = () => {
 
       <div className="bg-gray-800/70 backdrop-blur-sm rounded-xl shadow-xl overflow-hidden border border-gray-700/50">
         <div className="bg-gradient-to-r from-purple-900/70 to-blue-900/70 p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-5">
             <div>
               <h1 className="text-2xl font-bold text-white">
                 Quản lý bài viết
