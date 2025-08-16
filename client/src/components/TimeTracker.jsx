@@ -4,26 +4,26 @@ import { getTimes, updateTime } from "../api/timeApi";
 
 const TimeTracker = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [timeFromApi, setTimeFromApi] = useState(null);
+  const [timeFromApi, setTimeFromApi] = useState(null); // Date (UTC instant)
   const [elapsed, setElapsed] = useState("");
-  const [newTime, setNewTime] = useState("");
+  const [newTime, setNewTime] = useState(""); // value from <input type="datetime-local">
   const [timeId, setTimeId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Fetch time data from API
+  // 1) Fetch time (assume API returns ISO UTC like "2025-08-15T21:13:00.000Z")
   useEffect(() => {
     const fetchTime = async () => {
       setIsLoading(true);
       try {
         const res = await getTimes();
         if (res.data?.length > 0) {
-          const firstTime = res.data[0];
-          setTimeFromApi(new Date(firstTime.dateTime));
-          setTimeId(firstTime._id);
+          const first = res.data[0];
+          setTimeFromApi(new Date(first.dateTime)); // store as Date instant
+          setTimeId(first._id);
         }
-      } catch (error) {
-        console.error("Error fetching time:", error);
+      } catch (err) {
+        console.error("Error fetching time:", err);
       } finally {
         setIsLoading(false);
       }
@@ -31,66 +31,116 @@ const TimeTracker = () => {
     fetchTime();
   }, []);
 
-  // Update current time every second
+  // 2) Tick every second
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(t);
   }, []);
 
-  // Calculate elapsed time
+  // 3) Recompute humanized elapsed
   useEffect(() => {
     if (timeFromApi) {
-      setElapsed(formatElapsed(timeFromApi, currentTime));
+      setElapsed(humanizeElapsed(timeFromApi, currentTime));
     }
   }, [currentTime, timeFromApi]);
 
-  const formatDateTime = (date) => {
-    if (!date) return "";
-    const dd = String(date.getDate()).padStart(2, "0");
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const yyyy = date.getFullYear();
-    const hh = String(date.getHours()).padStart(2, "0");
-    const min = String(date.getMinutes()).padStart(2, "0");
-    const ss = String(date.getSeconds()).padStart(2, "0");
-    return `${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
-  };
+  // ---- Formatters ----
 
-  const formatElapsed = (start, end) => {
-    const diffMs = end - start;
-    const diffSec = Math.floor(diffMs / 1000);
-    const diffMin = Math.floor(diffSec / 60);
-    const diffHours = Math.floor(diffMin / 60);
-    const diffDays = Math.floor(diffHours / 24);
+  // Local display for current time
+  const formatLocal = (date) =>
+    date?.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }) ?? "";
 
-    if (diffDays < 1) {
-      return `${String(diffHours).padStart(2, "0")}:${String(
-        diffMin % 60
-      ).padStart(2, "0")}:${String(diffSec % 60).padStart(2, "0")}`;
-    } else if (diffDays < 7) {
-      return `${diffDays} ngày ${diffHours % 24} giờ`;
-    } else if (diffDays < 30) {
-      return `${Math.floor(diffDays / 7)} tuần ${diffDays % 7} ngày`;
-    } else if (diffDays < 365) {
-      return `${Math.floor(diffDays / 30)} tháng ${Math.floor(
-        (diffDays % 30) / 7
-      )} tuần`;
-    } else {
-      return `${Math.floor(diffDays / 365)} năm ${Math.floor(
-        (diffDays % 365) / 30
-      )} tháng`;
+  // UTC display for API time (show exactly what ISO Z represents)
+  const formatUTC = (date) =>
+    date
+      ? `${date.toLocaleString("vi-VN", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "UTC",
+        })}`
+      : "";
+
+  // Humanize duration per spec:
+  // - 1 ngày, 2 ngày
+  // - 1 tuần, 2 tuần
+  // - 1 ngày 3 giờ
+  // - 1 tháng
+  // - 2 năm 3 tháng, v.v.
+  const humanizeElapsed = (start, end) => {
+    let diffMs = end - start;
+    if (diffMs <= 0) return "0 giây";
+
+    const second = 1000;
+    const minute = 60 * second;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day; // xấp xỉ để humanize
+    const year = 365 * day; // xấp xỉ để humanize
+
+    const years = Math.floor(diffMs / year);
+    diffMs -= years * year;
+
+    const months = Math.floor(diffMs / month);
+    diffMs -= months * month;
+
+    const weeks = Math.floor(diffMs / week);
+    diffMs -= weeks * week;
+
+    const days = Math.floor(diffMs / day);
+    diffMs -= days * day;
+
+    const hours = Math.floor(diffMs / hour);
+    diffMs -= hours * hour;
+
+    const minutes = Math.floor(diffMs / minute);
+    diffMs -= minutes * minute;
+
+    // Quy tắc hiển thị ưu tiên theo “đơn vị lớn nhất”, kèm phần dư hợp lý
+    if (years > 0) {
+      return months > 0 ? `${years} năm ${months} tháng` : `${years} năm`;
     }
+    if (months > 0) {
+      return weeks > 0 ? `${months} tháng ${weeks} tuần` : `${months} tháng`;
+    }
+    if (weeks > 0) {
+      return days > 0 ? `${weeks} tuần ${days} ngày` : `${weeks} tuần`;
+    }
+    if (days > 0) {
+      return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+    }
+    if (hours > 0) {
+      return minutes > 0 ? `${hours} giờ ${minutes} phút` : `${hours} giờ`;
+    }
+    if (minutes > 0) return `${minutes} phút`;
+    const seconds = Math.floor(diffMs / second);
+    return `${seconds} giây`;
   };
+
+  // ---- Handlers ----
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newTime || !timeId) return;
 
+    // newTime từ <input type="datetime-local"> là local time (không timezone).
+    // Chuyển sang ISO UTC để lưu nhất quán server.
+    const isoUtc = new Date(newTime).toISOString();
+
     setIsLoading(true);
     try {
-      await updateTime(timeId, { dateTime: newTime });
-      setTimeFromApi(new Date(newTime));
+      await updateTime(timeId, { dateTime: isoUtc });
+      setTimeFromApi(new Date(isoUtc)); // cập nhật state theo UTC vừa lưu
       setNewTime("");
     } catch (error) {
       console.error("Error updating time:", error);
@@ -100,54 +150,32 @@ const TimeTracker = () => {
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(`Đã trôi qua: ${elapsed}`);
+    navigator.clipboard.writeText(elapsed || "");
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleRefresh = () => {
-    window.location.reload();
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <div className=" bg-gray-800 rounded-xl shadow-2xl overflow-hidden ">
-      {/* Main Content */}
+    <div className="bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
       <div className="p-6">
-        {/* Time Cards Grid */}
+        {/* Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Current Time Card */}
-          <div className="bg-gray-700 rounded-lg p-5 shadow">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-full bg-blue-500/20">
-                <Clock className="w-5 h-5 text-blue-400" />
-              </div>
-              <h3 className="font-semibold text-gray-200">
-                Thời gian hiện tại
-              </h3>
-            </div>
-            <p className="text-2xl  text-white font-bold">
-              {formatDateTime(currentTime)}
-            </p>
-          </div>
+          <Card
+            icon={<Clock className="w-5 h-5 text-blue-400" />}
+            chipClass="bg-blue-500/20"
+            title="Thời gian hiện tại"
+            value={formatLocal(currentTime)}
+          />
 
-          {/* API Time Card */}
           {timeFromApi && (
-            <div className="bg-gray-700 rounded-lg p-5 shadow">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-full bg-green-500/20">
-                  <Calendar className="w-5 h-5 text-green-400" />
-                </div>
-                <h3 className="font-semibold text-gray-200">
-                  Thời gian từ API
-                </h3>
-              </div>
-              <p className="text-2xl  text-white font-bold">
-                {formatDateTime(timeFromApi)}
-              </p>
-            </div>
+            <Card
+              icon={<Calendar className="w-5 h-5 text-green-400" />}
+              chipClass="bg-green-500/20"
+              title="Thời gian từ API (UTC)"
+              value={formatUTC(timeFromApi)}
+            />
           )}
 
-          {/* Elapsed Time Card */}
           {elapsed && (
             <div className="bg-gray-700 rounded-lg p-5 shadow relative">
               <div className="flex items-center gap-3 mb-3">
@@ -158,19 +186,19 @@ const TimeTracker = () => {
                   Thời gian trôi qua
                 </h3>
               </div>
-              <p className="text-2xl  text-white mb-4 font-bold">{elapsed}</p>
+              <p className="text-2xl text-white mb-4 font-bold">{elapsed}</p>
               <button
                 onClick={handleCopy}
-                className="absolute bottom-4 right-4 py-3 px-4 font-bold flex items-center gap-2 rounded-full bg-gray-600 hover:bg-gray-500 transition-colors group"
+                className="absolute bottom-4 right-4 py-2 px-3 font-bold flex items-center gap-2 rounded-full bg-gray-600 hover:bg-gray-500 transition-colors group"
                 title="Copy to clipboard"
               >
                 <Copy className="w-4 h-4 text-gray-300 group-hover:text-white" />
                 Copy
               </button>
               {copied && (
-                <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full animate-bounce">
+                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full animate-bounce">
                   Copied!
-                </div>
+                </span>
               )}
             </div>
           )}
@@ -185,15 +213,18 @@ const TimeTracker = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                Chọn thời gian
+                Chọn thời gian (Local)
               </label>
               <input
                 type="datetime-local"
-                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 value={newTime}
                 onChange={(e) => setNewTime(e.target.value)}
                 required
               />
+              <p className="text-xs text-gray-400 mt-1">
+                Sẽ được lưu lên server dưới dạng UTC (ISO).
+              </p>
             </div>
             <button
               type="submit"
@@ -212,5 +243,15 @@ const TimeTracker = () => {
     </div>
   );
 };
+
+const Card = ({ icon, title, value, chipClass = "bg-gray-500/20" }) => (
+  <div className="bg-gray-700 rounded-lg p-5 shadow">
+    <div className="flex items-center gap-3 mb-3">
+      <div className={`p-2 rounded-full ${chipClass}`}>{icon}</div>
+      <h3 className="font-semibold text-gray-200">{title}</h3>
+    </div>
+    <p className="text-2xl text-white font-bold">{value}</p>
+  </div>
+);
 
 export default TimeTracker;
