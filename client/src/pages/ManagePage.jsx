@@ -1,83 +1,107 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowUpDown,
-  Calendar,
-  Clock,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  TextCursorInput,
-  Edit,
-  Trash2,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Search, Edit, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { deletePost, getAllPosts } from "../api/postApi";
 import Swal from "sweetalert2";
-import { formatFullDateTime } from "../utils/formatFullDateTime";
+import { postsCollection, db } from "../config/firebase";
+import { getDocs, query, orderBy, doc, deleteDoc } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
 const ManagePage = () => {
   const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    description: "",
-    sortBy: "newest",
-    timeOfDay: "",
-    page: 1,
-    limit: 30,
-  });
-  const [pagination, setPagination] = useState({
-    total: 0,
-    totalPages: 1,
+    search: "",
+    month: "all",
+    weekday: "all",
   });
 
+  // Fetch posts
   const fetchPosts = async () => {
     try {
       setLoading(true);
+      const q = query(postsCollection, orderBy("dateTime", "desc"));
+      const querySnapshot = await getDocs(q);
 
-      const apiParams = {
-        description: filters.description,
-        page: filters.page,
-        limit: filters.limit,
-      };
+      let data = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-      if (filters.timeOfDay) {
-        // Nếu chọn buổi cụ thể
-        apiParams.timeOfDay = filters.timeOfDay;
-        apiParams.sortBy = "timeOfDay";
-        apiParams.sortOrder = "asc"; // Sáng → Tối (hoặc "desc" nếu muốn ngược)
-      } else {
-        // Nếu chọn tất cả buổi
-        apiParams.sortBy = "dateTime";
-        apiParams.sortOrder = filters.sortBy === "oldest" ? "asc" : "desc";
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        data = data.filter((p) =>
+          p.description?.toLowerCase().includes(searchLower)
+        );
       }
 
-      const { data } = await getAllPosts(apiParams);
+      // Filter theo tháng
+      if (filters.month !== "all") {
+        data = data.filter((p) => {
+          const d = new Date(p.dateTime);
+          return d.getMonth() + 1 === Number(filters.month);
+        });
+      }
 
-      setPosts(data.data);
-      setPagination({
-        total: data.total,
-        totalPages: data.totalPages,
-      });
+      // Filter theo thứ
+      if (filters.weekday !== "all") {
+        data = data.filter((p) => {
+          const d = new Date(p.dateTime);
+          let day = d.getDay(); // 0 = CN
+          if (day === 0) day = 8; // Chủ Nhật = 8
+          return day === Number(filters.weekday);
+        });
+      }
+
+      setPosts(data);
     } catch (error) {
       console.error("Error fetching posts:", error);
-      toast.error("Failed to load posts", {
-        style: {
-          background: "#1e293b",
-          color: "#f8fafc",
-          border: "1px solid #334155",
-        },
-      });
     } finally {
       setLoading(false);
     }
   };
 
+  // Debounce search/filter
   useEffect(() => {
-    fetchPosts();
+    const timer = setTimeout(() => {
+      fetchPosts();
+    }, 400);
+    return () => clearTimeout(timer);
   }, [filters]);
+
+  // Format datetime
+  const formatFullDateTime = (date) => {
+    const d = new Date(date);
+    return d.toLocaleString("vi-VN", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  };
+
+  // Handle filter change
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleResetFilter = () => {
+    setFilters((prev) => ({
+      ...prev,
+      search: "",
+      month: "all",
+      weekday: "all",
+    }));
+  };
 
   const handleDeletePost = async (postId) => {
     Swal.fire({
@@ -94,15 +118,18 @@ const ManagePage = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await deletePost(postId);
-          toast.success("Xóa bài viết thành công!", {
+          // Xóa document trong Firestore
+          await deleteDoc(doc(db, "posts", postId));
+
+          toast.success("Đã xóa bài viết thành công!", {
             style: {
               background: "#1e293b",
               color: "#f8fafc",
               border: "1px solid #334155",
             },
           });
-          fetchPosts(); // Refresh the list
+
+          fetchPosts(); // Refresh lại danh sách
         } catch (error) {
           console.error("Error deleting post:", error);
           toast.error("Xóa bài viết thất bại!", {
@@ -117,34 +144,6 @@ const ManagePage = () => {
     });
   };
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters((prev) => ({
-      ...prev,
-      [name]: value,
-      page: 1,
-    }));
-  };
-
-  const handleResetFilter = () => {
-    setFilters({
-      description: "",
-      sortBy: "newest",
-      timeOfDay: "",
-      page: 1,
-      limit: 30,
-    });
-  };
-
-  const getTimeOfDay = (date) => {
-    const hourVN = new Date(date).getUTCHours() + 7;
-    const hour = hourVN >= 24 ? hourVN - 24 : hourVN;
-    if (hour >= 5 && hour < 11) return "Sáng";
-    if (hour >= 11 && hour < 13) return "Trưa";
-    if (hour >= 13 && hour < 17) return "Chiều";
-    return "Tối";
-  };
-
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -155,16 +154,16 @@ const ManagePage = () => {
           <span className="flex items-center bg-gray-800/60 hover:bg-gray-700/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-gray-700/50 group-hover:border-purple-400/30 transition-all">
             <ArrowLeft className="mr-2 h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />
             <span className="text-gray-300 group-hover:text-white bg-gradient-to-r from-purple-400/80 to-blue-400/80 bg-clip-text text-transparent">
-              Back
+              Quay về
             </span>
           </span>
         </button>
 
         <button
           onClick={() => navigate("/create-post")}
-          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-purple-500/20 transition-all"
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-purple-500/20 transition-all font-bold"
         >
-          Create Post
+          Tạo bài viết
         </button>
       </div>
 
@@ -199,52 +198,62 @@ const ManagePage = () => {
                 <path d="M7 12h10" />
                 <path d="M10 18h4" />
               </svg>
-              <span>Đặt lại bộ lọc</span>
+              <span>Đặt lại</span>
             </button>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="p-6 border-b border-gray-700/50">
+        {/* Filter + Search */}
+        <div className="mb-6 bg-gray-800 rounded-xl p-4 shadow-lg">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Search Input */}
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-gray-400" />
               </div>
               <input
                 type="text"
-                name="description"
-                value={filters.description}
+                name="search"
+                value={filters.search}
                 onChange={handleFilterChange}
                 placeholder="Tìm kiếm..."
-                className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
               />
             </div>
 
+            {/* Filter by Month */}
             <div>
               <select
-                name="sortBy"
-                value={filters.sortBy}
+                name="month"
+                value={filters.month}
                 onChange={handleFilterChange}
-                className="w-full bg-gray-700/80 border border-gray-600/50 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="newest">Mới nhất</option>
-                <option value="oldest">Cũ nhất</option>
+                <option value="all">Tất cả tháng</option>
+                {[...Array(12)].map((_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    Tháng {i + 1}
+                  </option>
+                ))}
               </select>
             </div>
 
-            <div className="relative">
+            {/* Filter by Weekday */}
+            <div>
               <select
-                name="timeOfDay"
-                value={filters.timeOfDay}
+                name="weekday"
+                value={filters.weekday}
                 onChange={handleFilterChange}
-                className="w-full bg-gray-700/80 border border-gray-600/50 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="">Tất cả thời gian</option>
-                <option value="morning">Sáng</option>
-                <option value="noon">Trưa</option>
-                <option value="afternoon">Chiều</option>
-                <option value="evening">Tối</option>
+                <option value="all">Tất cả các ngày</option>
+                <option value="1">Thứ 2</option>
+                <option value="2">Thứ 3</option>
+                <option value="3">Thứ 4</option>
+                <option value="4">Thứ 5</option>
+                <option value="5">Thứ 6</option>
+                <option value="6">Thứ 7</option>
+                <option value="8">Chủ Nhật</option>
               </select>
             </div>
           </div>
@@ -262,31 +271,25 @@ const ManagePage = () => {
                 <tr>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
+                    className="px-6 py-3 text-left  font-medium text-gray-300 uppercase tracking-wider cursor-pointer"
                   >
                     Ngày/Giờ
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                    className="px-6 py-3 text-left  font-medium text-gray-300 uppercase tracking-wider"
                   >
                     Mô tả
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
-                  >
-                    Buổi
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider "
+                    className="px-6 py-3 text-left  font-medium text-gray-300 uppercase tracking-wider "
                   >
                     Thời lượng
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider"
+                    className="px-6 py-3 text-left  font-medium text-gray-300 uppercase tracking-wider"
                   >
                     Hành động
                   </th>
@@ -299,29 +302,30 @@ const ManagePage = () => {
                       key={post._id}
                       className="hover:bg-gray-700/20 transition-colors"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {formatFullDateTime(post.dateTime)}
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-300">
+                        <div className=" text-yellow-400 rounded font-semibold w-fit">
+                          {formatFullDateTime(post.dateTime)}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-300 min-w-xs max-w-xs">
+                      <td className="px-6 py-4 font-medium text-gray-300 min-w-xs max-w-xs">
                         {post.description}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {getTimeOfDay(post.dateTime)}
+                      <td className="px-6 py-4 whitespace-nowrap  text-gray-300">
+                        <div className=" text-green-400 rounded font-semibold w-fit">
+                          {post.duration}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {post.duration}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                      <td className="px-6 py-4 whitespace-nowrap  text-gray-300">
                         <div className="flex space-x-2">
                           <button
-                            onClick={() => navigate(`/update-post/${post._id}`)}
+                            onClick={() => navigate(`/update-post/${post.id}`)}
                             className="p-4 bg-blue-600/50 hover:bg-blue-700/50 rounded-md transition-colors"
                             title="Chỉnh sửa"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => handleDeletePost(post._id)}
+                            onClick={() => handleDeletePost(post.id)}
                             className="p-4 bg-red-600/50 hover:bg-red-700/50 rounded-md transition-colors"
                             title="Xóa"
                           >
@@ -335,7 +339,7 @@ const ManagePage = () => {
                   <tr>
                     <td
                       colSpan="4"
-                      className="px-6 py-4 text-center text-sm text-gray-400"
+                      className="px-6 py-4 text-center  text-gray-400"
                     >
                       Không tìm thấy bài viết
                     </td>
@@ -345,35 +349,6 @@ const ManagePage = () => {
             </table>
           )}
         </div>
-
-        {/* Pagination at bottom */}
-        {!loading && pagination.totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-700/50 flex items-center justify-center space-x-4">
-            <button
-              onClick={() =>
-                setFilters((prev) => ({ ...prev, page: prev.page - 1 }))
-              }
-              disabled={filters.page === 1}
-              className="flex items-center px-4 py-2 rounded-lg border border-gray-700/50 bg-gray-800/50 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700/50 transition-colors"
-            >
-              <ChevronLeft className="h-5 w-5 text-gray-300 mr-2" />
-              Previous
-            </button>
-            <div className="text-sm text-gray-300">
-              Trang {filters.page} / {pagination.totalPages}
-            </div>
-            <button
-              onClick={() =>
-                setFilters((prev) => ({ ...prev, page: prev.page + 1 }))
-              }
-              disabled={filters.page === pagination.totalPages}
-              className="flex items-center px-4 py-2 rounded-lg border border-gray-700/50 bg-gray-800/50 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700/50 transition-colors"
-            >
-              Next
-              <ChevronRight className="h-5 w-5 text-gray-300 ml-2" />
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -1,149 +1,97 @@
 import { useState, useEffect } from "react";
 import { Calendar, Clock, Copy } from "lucide-react";
-import { getTimes, updateTime } from "../api/timeApi";
+import {
+  doc,
+  getDocs,
+  updateDoc,
+  collection,
+  query,
+  limit,
+} from "firebase/firestore";
+import { db, timeCollection } from "../config/firebase";
 
 const TimeTracker = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [timeFromApi, setTimeFromApi] = useState(null); // Date (UTC instant)
+  const [timeFromApi, setTimeFromApi] = useState(null);
   const [elapsed, setElapsed] = useState("");
-  const [newTime, setNewTime] = useState(""); // value from <input type="datetime-local">
+  const [newTime, setNewTime] = useState("");
   const [timeId, setTimeId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 1) Fetch time (assume API returns ISO UTC like "2025-08-15T21:13:00.000Z")
-  useEffect(() => {
-    const fetchTime = async () => {
-      setIsLoading(true);
-      try {
-        const res = await getTimes();
-        if (res.data?.length > 0) {
-          const first = res.data[0];
-          setTimeFromApi(new Date(first.dateTime)); // store as Date instant
-          setTimeId(first._id);
-        }
-      } catch (err) {
-        console.error("Error fetching time:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchTime();
-  }, []);
-
-  // 2) Tick every second
-  useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // 3) Recompute humanized elapsed
-  useEffect(() => {
-    if (timeFromApi) {
-      setElapsed(humanizeElapsed(timeFromApi, currentTime));
-    }
-  }, [currentTime, timeFromApi]);
-
-  // ---- Formatters ----
-
-  // Local display for current time
-  const formatLocal = (date) =>
-    date?.toLocaleString("vi-VN", {
+  // format datetime -> Chủ Nhật, 24/08/2025 15:23
+  const formatDateTime = (date) => {
+    return date.toLocaleString("vi-VN", {
+      weekday: "long",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-    }) ?? "";
-
-  // UTC display for API time (show exactly what ISO Z represents)
-  const formatUTC = (date) =>
-    date
-      ? `${date.toLocaleString("vi-VN", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: "UTC",
-        })}`
-      : "";
-
-  // Humanize duration per spec:
-  // - 1 ngày, 2 ngày
-  // - 1 tuần, 2 tuần
-  // - 1 ngày 3 giờ
-  // - 1 tháng
-  // - 2 năm 3 tháng, v.v.
-  const humanizeElapsed = (start, end) => {
-    let diffMs = end - start;
-    if (diffMs <= 0) return "0 giây";
-
-    const second = 1000;
-    const minute = 60 * second;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-    const week = 7 * day;
-    const month = 30 * day; // xấp xỉ để humanize
-    const year = 365 * day; // xấp xỉ để humanize
-
-    const years = Math.floor(diffMs / year);
-    diffMs -= years * year;
-
-    const months = Math.floor(diffMs / month);
-    diffMs -= months * month;
-
-    const weeks = Math.floor(diffMs / week);
-    diffMs -= weeks * week;
-
-    const days = Math.floor(diffMs / day);
-    diffMs -= days * day;
-
-    const hours = Math.floor(diffMs / hour);
-    diffMs -= hours * hour;
-
-    const minutes = Math.floor(diffMs / minute);
-    diffMs -= minutes * minute;
-
-    // Quy tắc hiển thị ưu tiên theo “đơn vị lớn nhất”, kèm phần dư hợp lý
-    if (years > 0) {
-      return months > 0 ? `${years} năm ${months} tháng` : `${years} năm`;
-    }
-    if (months > 0) {
-      return weeks > 0 ? `${months} tháng ${weeks} tuần` : `${months} tháng`;
-    }
-    if (weeks > 0) {
-      return days > 0 ? `${weeks} tuần ${days} ngày` : `${weeks} tuần`;
-    }
-    if (days > 0) {
-      return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
-    }
-    if (hours > 0) {
-      return minutes > 0 ? `${hours} giờ ${minutes} phút` : `${hours} giờ`;
-    }
-    if (minutes > 0) return `${minutes} phút`;
-    const seconds = Math.floor(diffMs / second);
-    return `${seconds} giây`;
+      hour12: false,
+    });
   };
 
-  // ---- Handlers ----
+  // format thời gian trôi qua (ví dụ: 1 ngày 3 giờ, 2 tuần, v.v.)
+  const formatElapsed = (start, now) => {
+    const diff = Math.floor((now - start) / 1000); // giây
+    const days = Math.floor(diff / (60 * 60 * 24));
+    const hours = Math.floor((diff % (60 * 60 * 24)) / (60 * 60));
+    const minutes = Math.floor((diff % (60 * 60)) / 60);
 
+    if (days > 0)
+      return `${days} ngày ${hours > 0 ? hours + " giờ" : ""}`.trim();
+    if (hours > 0)
+      return `${hours} giờ ${minutes > 0 ? minutes + " phút" : ""}`.trim();
+    return `${minutes} phút`;
+  };
+
+  // lấy doc đầu tiên từ Firestore
+  useEffect(() => {
+    const fetchTime = async () => {
+      const q = query(timeCollection, limit(1));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        setTimeId(docSnap.id);
+        const dateTime = new Date(docSnap.data().dateTime);
+        setTimeFromApi(dateTime);
+      }
+    };
+
+    fetchTime();
+  }, []);
+
+  // setInterval cập nhật currentTime + elapsed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+      if (timeFromApi) {
+        setElapsed(formatElapsed(new Date(timeFromApi), new Date()));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timeFromApi]);
+
+  // cập nhật time khi user submit
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newTime || !timeId) return;
 
-    // newTime từ <input type="datetime-local"> là local time (không timezone).
-    // Chuyển sang ISO UTC để lưu nhất quán server.
-    const isoUtc = new Date(newTime).toISOString();
-
     setIsLoading(true);
     try {
-      await updateTime(timeId, { dateTime: isoUtc });
-      setTimeFromApi(new Date(isoUtc)); // cập nhật state theo UTC vừa lưu
+      const docRef = doc(db, "times", timeId);
+      // convert local datetime -> ISO UTC
+      const utcTime = new Date(newTime).toISOString();
+      await updateDoc(docRef, { dateTime: utcTime });
+
+      setTimeFromApi(new Date(utcTime));
       setNewTime("");
-    } catch (error) {
-      console.error("Error updating time:", error);
+    } catch (err) {
+      console.error("Error updating time:", err);
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +112,7 @@ const TimeTracker = () => {
             icon={<Clock className="w-5 h-5 text-blue-400" />}
             chipClass="bg-blue-500/20"
             title="Thời gian hiện tại"
-            value={formatLocal(currentTime)}
+            value={formatDateTime(currentTime)}
           />
 
           {timeFromApi && (
@@ -172,7 +120,7 @@ const TimeTracker = () => {
               icon={<Calendar className="w-5 h-5 text-green-400" />}
               chipClass="bg-green-500/20"
               title="Thời gian từ API (UTC)"
-              value={formatUTC(timeFromApi)}
+              value={formatDateTime(new Date(timeFromApi))}
             />
           )}
 

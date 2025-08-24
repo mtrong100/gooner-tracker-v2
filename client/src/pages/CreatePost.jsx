@@ -1,15 +1,15 @@
 import { useState } from "react";
-import axiosClient from "../api/axiosClient";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Calendar, Clock, TextCursorInput, ArrowLeft } from "lucide-react";
-import { createPost } from "../api/postApi";
+import { addDoc } from "firebase/firestore";
+import { postsCollection } from "../config/firebase";
 
 const CreatePost = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     dateTime: "",
-    description: "I'm goon again",
+    description: "",
     duration: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,48 +24,27 @@ const CreatePost = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!formData.dateTime || !formData.description || !formData.duration) {
-      toast.error("Please fill in all fields", {
-        style: {
-          background: "#1e293b",
-          color: "#f8fafc",
-          border: "1px solid #334155",
-        },
-      });
+    if (!formData.dateTime) {
+      toast.error("Vui lòng chọn ngày giờ");
       return;
     }
 
-    setIsSubmitting(true);
-
     try {
-      await createPost(formData);
-      toast.success("Post created successfully!", {
-        style: {
-          background: "linear-gradient(to right, #4f46e5, #7c3aed)",
-          color: "#f8fafc",
-        },
-        iconTheme: {
-          primary: "#f8fafc",
-          secondary: "#4f46e5",
-        },
+      setIsSubmitting(true);
+
+      await addDoc(postsCollection, {
+        dateTime: new Date(formData.dateTime).toISOString(),
+        description: formData.description || "",
+        duration: formData.duration || "",
       });
+
+      toast.success("Tạo bài viết thành công!");
+      navigate("/manage");
     } catch (error) {
       console.error("Error creating post:", error);
-      toast.error(error.response?.data?.message || "Failed to create post", {
-        style: {
-          background: "#1e293b",
-          color: "#f8fafc",
-          border: "1px solid #334155",
-        },
-      });
+      toast.error("Có lỗi xảy ra khi tạo bài viết");
     } finally {
       setIsSubmitting(false);
-      setFormData({
-        dateTime: "",
-        description: "I'm goon again",
-        duration: "",
-      });
     }
   };
 
@@ -132,9 +111,7 @@ const CreatePost = () => {
               value={formData.description}
               onChange={handleChange}
               rows={4}
-              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-              placeholder="Share what's on your mind..."
-              required
+              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400"
             />
           </div>
 
@@ -147,21 +124,14 @@ const CreatePost = () => {
               <Clock className="mr-2 h-4 w-4 text-purple-400" />
               Thời lượng
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="duration"
-                name="duration"
-                value={formData.duration}
-                onChange={handleChange}
-                placeholder="e.g. 2 hours, 30 minutes"
-                className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                required
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <span className="text-gray-400 text-sm">⏱️</span>
-              </div>
-            </div>
+            <input
+              type="text"
+              id="duration"
+              name="duration"
+              value={formData.duration}
+              onChange={handleChange}
+              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400"
+            />
           </div>
 
           <div className="pt-4">

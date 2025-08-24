@@ -8,7 +8,8 @@ import {
   ArrowLeft,
   Save,
 } from "lucide-react";
-import { getPost, updatePost } from "../api/postApi";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "../config/firebase";
 
 const UpdatePost = () => {
   const { id } = useParams();
@@ -21,31 +22,49 @@ const UpdatePost = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const formatDateTimeLocalForInput = (value) => {
+    let d;
+    if (!value) return ""; // guard
+    if (typeof value === "string") d = new Date(value); // ISO string
+    else if (value?.toDate) d = value.toDate(); // Firestore Timestamp
+    else d = new Date(value); // fallback
+
+    const pad = (n) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const MM = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const HH = pad(d.getHours()); // <-- local hours
+    const mm = pad(d.getMinutes()); // <-- local minutes
+    return `${yyyy}-${MM}-${dd}T${HH}:${mm}`;
+  };
+
   useEffect(() => {
-    const fetchPost = async () => {
+    const fetchPostById = async () => {
       try {
-        const { data } = await getPost(id);
-        setFormData({
-          dateTime: new Date(data.dateTime).toISOString().slice(0, 16),
-          description: data.description,
-          duration: data.duration,
-        });
+        const docRef = doc(db, "posts", id);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+
+          setFormData({
+            dateTime: formatDateTimeLocalForInput(data.dateTime),
+            description: data.description || "",
+            duration: data.duration || "",
+          });
+        } else {
+          toast.error("Không tìm thấy bài viết!");
+          navigate("/manage");
+        }
       } catch (error) {
         console.error("Error fetching post:", error);
-        toast.error("Failed to load post data", {
-          style: {
-            background: "#1e293b",
-            color: "#f8fafc",
-            border: "1px solid #334155",
-          },
-        });
-        navigate("/posts");
+        toast.error("Có lỗi khi tải dữ liệu!");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchPost();
+    fetchPostById();
   }, [id, navigate]);
 
   const handleChange = (e) => {
@@ -58,45 +77,31 @@ const UpdatePost = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!formData.dateTime || !formData.description || !formData.duration) {
-      toast.error("Please fill in all fields", {
-        style: {
-          background: "#1e293b",
-          color: "#f8fafc",
-          border: "1px solid #334155",
-        },
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
     try {
-      await updatePost(id, formData);
-      toast.success("Post updated successfully!", {
-        style: {
-          background: "linear-gradient(to right, #4f46e5, #7c3aed)",
-          color: "#f8fafc",
-        },
-        iconTheme: {
-          primary: "#f8fafc",
-          secondary: "#4f46e5",
-        },
+      setIsSubmitting(true);
+
+      const docRef = doc(db, "posts", id);
+      await updateDoc(docRef, {
+        dateTime: new Date(formData.dateTime).toISOString(),
+        description: formData.description,
+        duration: formData.duration,
       });
+
+      toast.success("Cập nhật thành công!");
+      navigate("/manage");
     } catch (error) {
       console.error("Error updating post:", error);
-      toast.error(error.response?.data?.message || "Failed to update post", {
-        style: {
-          background: "#1e293b",
-          color: "#f8fafc",
-          border: "1px solid #334155",
-        },
-      });
+      toast.error("Cập nhật thất bại!");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="text-center text-white mt-10">Đang tải dữ liệu...</div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl">
@@ -130,23 +135,18 @@ const UpdatePost = () => {
               <Calendar className="mr-2 h-4 w-4 text-purple-400" />
               Ngày & Giờ
             </label>
-            <div className="relative">
-              <input
-                type="datetime-local"
-                id="dateTime"
-                name="dateTime"
-                value={formData.dateTime}
-                onChange={handleChange}
-                className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                required
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <span className="text-gray-400 text-sm">⌚</span>
-              </div>
-            </div>
+            <input
+              type="datetime-local"
+              id="dateTime"
+              name="dateTime"
+              value={formData.dateTime}
+              onChange={handleChange}
+              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white"
+              required
+            />
           </div>
 
-          {/* Description Field */}
+          {/* Description */}
           <div className="space-y-3">
             <label
               htmlFor="description"
@@ -161,13 +161,13 @@ const UpdatePost = () => {
               value={formData.description}
               onChange={handleChange}
               rows={4}
-              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white"
               placeholder="Update your post content..."
               required
             />
           </div>
 
-          {/* Duration Field */}
+          {/* Duration */}
           <div className="space-y-3">
             <label
               htmlFor="duration"
@@ -176,21 +176,16 @@ const UpdatePost = () => {
               <Clock className="mr-2 h-4 w-4 text-purple-400" />
               Thời lượng
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="duration"
-                name="duration"
-                value={formData.duration}
-                onChange={handleChange}
-                placeholder="e.g. 2 hours, 30 minutes"
-                className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                required
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <span className="text-gray-400 text-sm">⏱️</span>
-              </div>
-            </div>
+            <input
+              type="text"
+              id="duration"
+              name="duration"
+              value={formData.duration}
+              onChange={handleChange}
+              placeholder="e.g. 2 hours, 30 minutes"
+              className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white"
+              required
+            />
           </div>
 
           <div className="pt-4">

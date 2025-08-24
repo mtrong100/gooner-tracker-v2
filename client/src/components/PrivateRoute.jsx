@@ -1,19 +1,29 @@
-import React from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../config/firebase";
 
-/**
- * PrivateRoute checks localStorage 'user' (JSON string).
- * If user exists -> render nested routes via <Outlet />
- * If not -> redirect to /login
- */
 export default function PrivateRoute() {
-  const raw = localStorage.getItem("user");
-  let user = null;
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  try {
-    user = raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    user = null;
+  useEffect(() => {
+    // Lắng nghe trạng thái đăng nhập
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    // cleanup khi unmount
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center text-white">
+        Loading...
+      </div>
+    );
   }
 
   return user ? <Outlet /> : <Navigate to="/login" replace />;

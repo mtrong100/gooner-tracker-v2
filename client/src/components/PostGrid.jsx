@@ -1,75 +1,56 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { getAllPosts } from "../api/postApi";
-import {
-  ArrowUpDown,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  Clock,
-  Loader,
-  RefreshCw,
-} from "lucide-react";
-import { formatFullDateTime } from "../utils/formatFullDateTime";
-
-// Animation variants
-const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
-  hover: { scale: 1.03, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.2)" },
-};
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-    },
-  },
-};
+import { Search, Calendar } from "lucide-react";
+import { postsCollection } from "../config/firebase";
+import { getDocs, query, orderBy } from "firebase/firestore";
 
 const PostGrid = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     search: "",
-    sortBy: "newest",
-    page: 1,
-    limit: 12,
-  });
-  const [pagination, setPagination] = useState({
-    total: 0,
-    totalPages: 1,
+    month: "all",
+    weekday: "all",
   });
 
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchPosts();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [filters.search, filters.sortBy]);
-
-  // Fetch posts from API
+  // Fetch posts
   const fetchPosts = async () => {
     try {
       setLoading(true);
-      const { data } = await getAllPosts({
-        description: filters.search,
-        sortBy: "dateTime",
-        sortOrder: filters.sortBy === "newest" ? "desc" : "asc",
-        page: filters.page,
-        limit: filters.limit,
-      });
+      const q = query(postsCollection, orderBy("dateTime", "desc"));
+      const querySnapshot = await getDocs(q);
 
-      setPosts(data.data);
-      setPagination({
-        total: data.total,
-        totalPages: data.totalPages,
-      });
+      let data = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        data = data.filter((p) =>
+          p.description?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      // Filter theo tháng
+      if (filters.month !== "all") {
+        data = data.filter((p) => {
+          const d = new Date(p.dateTime);
+          return d.getMonth() + 1 === Number(filters.month);
+        });
+      }
+
+      // Filter theo thứ
+      if (filters.weekday !== "all") {
+        data = data.filter((p) => {
+          const d = new Date(p.dateTime);
+          let day = d.getDay(); // 0 = CN
+          if (day === 0) day = 8; // Chủ Nhật = 8
+          return day === Number(filters.weekday);
+        });
+      }
+
+      setPosts(data);
     } catch (error) {
       console.error("Error fetching posts:", error);
     } finally {
@@ -77,111 +58,44 @@ const PostGrid = () => {
     }
   };
 
+  // Debounce search/filter
   useEffect(() => {
-    fetchPosts();
-  }, [filters.page, filters.limit]);
+    const timer = setTimeout(() => {
+      fetchPosts();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
-  // Handle filter changes
+  // Format datetime
+  const formatFullDateTime = (date) => {
+    const d = new Date(date);
+    return d.toLocaleString("vi-VN", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  };
+
+  // Handle filter change
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters((prev) => ({
       ...prev,
       [name]: value,
-      page: 1, // Reset to first page when filters change
     }));
-  };
-
-  // Handle pagination
-  const handlePageChange = (newPage) => {
-    setFilters((prev) => ({
-      ...prev,
-      page: newPage,
-    }));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  // Generate pagination buttons with ellipsis
-  const renderPaginationButtons = () => {
-    const buttons = [];
-    const { page } = filters;
-    const { totalPages } = pagination;
-
-    // Always show first page
-    buttons.push(
-      <PaginationButton
-        key={1}
-        page={1}
-        currentPage={page}
-        onClick={handlePageChange}
-      />
-    );
-
-    // Show ellipsis if current page is far from start
-    if (page > 3) {
-      buttons.push(
-        <span key="start-ellipsis" className="px-2 text-gray-400">
-          ...
-        </span>
-      );
-    }
-
-    // Show pages around current page
-    const start = Math.max(2, page - 1);
-    const end = Math.min(totalPages - 1, page + 1);
-
-    for (let i = start; i <= end; i++) {
-      buttons.push(
-        <PaginationButton
-          key={i}
-          page={i}
-          currentPage={page}
-          onClick={handlePageChange}
-        />
-      );
-    }
-
-    // Show ellipsis if current page is far from end
-    if (page < totalPages - 2) {
-      buttons.push(
-        <span key="end-ellipsis" className="px-2 text-gray-400">
-          ...
-        </span>
-      );
-    }
-
-    // Always show last page if there's more than one page
-    if (totalPages > 1) {
-      buttons.push(
-        <PaginationButton
-          key={totalPages}
-          page={totalPages}
-          currentPage={page}
-          onClick={handlePageChange}
-        />
-      );
-    }
-
-    return buttons;
   };
 
   return (
-    <div className="mb-5 mt-5 px-4 sm:px-6 lg:px-8">
-      <motion.h1
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="text-3xl font-bold text-white mb-6"
-      >
-        Danh sách bài viết
-      </motion.h1>
+    <div className="mb-5 mt-5">
+      <h1 className="text-3xl font-bold text-white mb-6">Danh sách bài viết</h1>
 
-      {/* Filter and Sort Controls */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="mb-6 bg-gray-800 rounded-xl p-4 shadow-lg"
-      >
+      {/* Filter + Search */}
+      <div className="mb-6 bg-gray-800 rounded-xl p-4 shadow-lg">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Search Input */}
           <div className="relative">
@@ -198,191 +112,96 @@ const PostGrid = () => {
             />
           </div>
 
-          {/* Sort Dropdown */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <ArrowUpDown className="h-5 w-5 text-gray-400" />
-            </div>
+          {/* Filter by Month */}
+          <div>
             <select
-              name="sortBy"
-              value={filters.sortBy}
+              name="month"
+              value={filters.month}
               onChange={handleFilterChange}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none transition-all duration-200"
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
-              <option value="newest">Mới nhất</option>
-              <option value="oldest">Cũ nhất</option>
+              <option value="all">Tất cả tháng</option>
+              {[...Array(12)].map((_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  Tháng {i + 1}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* Reset Filters Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() =>
-              setFilters({
-                search: "",
-                sortBy: "newest",
-                page: 1,
-                limit: 12,
-              })
-            }
-            className="flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-all duration-200"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Đặt lại bộ lọc
-          </motion.button>
+          {/* Filter by Weekday */}
+          <div>
+            <select
+              name="weekday"
+              value={filters.weekday}
+              onChange={handleFilterChange}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="all">Tất cả các ngày</option>
+              <option value="1">Thứ 2</option>
+              <option value="2">Thứ 3</option>
+              <option value="3">Thứ 4</option>
+              <option value="4">Thứ 5</option>
+              <option value="5">Thứ 6</option>
+              <option value="6">Thứ 7</option>
+              <option value="8">Chủ Nhật</option>
+            </select>
+          </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Posts Grid */}
-      <AnimatePresence mode="wait">
-        {loading ? (
-          // Loading skeleton cards
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-          >
-            {Array.from({ length: filters.limit }).map((_, index) => (
-              <motion.div
-                key={`skeleton-${index}`}
-                variants={cardVariants}
-                className="bg-gray-800 rounded-lg overflow-hidden shadow-lg"
-              >
-                <div className="p-4">
-                  <div className="h-5 bg-gray-700 rounded mb-3 w-3/4"></div>
-                  <div className="space-y-2">
-                    <div className="h-4 bg-gray-700 rounded"></div>
-                    <div className="h-4 bg-gray-700 rounded"></div>
-                    <div className="h-4 bg-gray-700 rounded w-5/6"></div>
-                  </div>
-
-                  <div className="flex items-center mt-4">
-                    <div className="h-4 w-4 bg-gray-700 rounded-full mr-2"></div>
-                    <div className="h-4 bg-gray-700 rounded w-24"></div>
-                  </div>
-
-                  <div className="flex items-center mt-2">
-                    <div className="h-4 w-4 bg-gray-700 rounded-full mr-2"></div>
-                    <div className="h-4 bg-gray-700 rounded w-16"></div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        ) : (
-          // Actual content
-          <motion.div
-            key={`posts-${filters.page}-${filters.search}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {posts.length > 0 ? (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-              >
-                {posts.map((post) => (
-                  <motion.div
-                    key={post._id}
-                    variants={cardVariants}
-                    initial="hidden"
-                    animate="visible"
-                    whileHover="hover"
-                    className="bg-gray-800 rounded-lg overflow-hidden shadow-lg transition-all duration-200 hover:z-10"
-                  >
-                    <div className="p-5">
-                      <p className="text-gray-300 mb-4 line-clamp-3 leading-relaxed">
-                        {post.description}
-                      </p>
-
-                      <div className="flex items-center text-gray-400 text-sm mb-2">
-                        <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span className="truncate">
-                          {formatFullDateTime(post.dateTime)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center text-gray-400 text-sm">
-                        <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span className="truncate">{post.duration}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="col-span-full text-center py-12"
-              >
-                <p className="text-gray-400 text-lg">
-                  No posts found matching your criteria
-                </p>
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Pagination - Only show when not loading and there are pages */}
-      {!loading && pagination.totalPages > 1 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex justify-center mt-8"
-        >
-          <nav className="flex items-center space-x-2">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handlePageChange(filters.page - 1)}
-              disabled={filters.page === 1}
-              className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {Array.from({ length: 28 }).map((_, index) => (
+            <div
+              key={`skeleton-${index}`}
+              className="bg-gray-800 rounded-lg overflow-hidden shadow-lg p-4"
             >
-              <ChevronLeft className="h-5 w-5" />
-            </motion.button>
-
-            {renderPaginationButtons()}
-
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handlePageChange(filters.page + 1)}
-              disabled={filters.page === pagination.totalPages}
-              className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              <div className="h-5 bg-gray-700 rounded mb-3 w-3/4"></div>
+              <div className="space-y-2">
+                <div className="h-4 bg-gray-700 rounded"></div>
+                <div className="h-4 bg-gray-700 rounded"></div>
+                <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                <div className="h-4 bg-gray-700 rounded"></div>
+                <div className="h-4 bg-gray-700 rounded"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : posts.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {posts.map((post) => (
+            <div
+              key={post.id}
+              className="bg-gray-800 rounded-lg p-6 shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col gap-5"
             >
-              <ChevronRight className="h-5 w-5" />
-            </motion.button>
-          </nav>
-        </motion.div>
+              {/* DateTime + Duration */}
+              <div className=" text-yellow-400 rounded font-semibold w-fit">
+                🕒 {formatFullDateTime(post.dateTime)}
+              </div>
+
+              {/* Description */}
+              <p className="text-gray-300 mb-2 flex-1 font-medium">
+                {post.description}
+              </p>
+
+              <div className=" text-green-400 rounded font-semibold w-fit">
+                ⏳ {post.duration}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="col-span-full text-center py-12">
+          <p className="text-gray-400 text-lg">
+            Không tìm thấy bài viết nào phù hợp
+          </p>
+        </div>
       )}
     </div>
-  );
-};
-
-// Reusable pagination button component
-const PaginationButton = ({ page, currentPage, onClick }) => {
-  return (
-    <motion.button
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={() => onClick(page)}
-      className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-        currentPage === page
-          ? "bg-purple-600 text-white"
-          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-      } transition-all duration-200`}
-    >
-      {page}
-    </motion.button>
   );
 };
 
